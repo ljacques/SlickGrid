@@ -7,7 +7,8 @@
           Avg: AvgAggregator,
           Min: MinAggregator,
           Max: MaxAggregator,
-          Sum: SumAggregator
+          Sum: SumAggregator,
+          Count: CountAggregator
         }
       }
     }
@@ -53,7 +54,7 @@
     var groupingInfoDefaults = {
       getter: null,
       formatter: null,
-      comparer: function(a, b) {
+      comparer: function (a, b) {
         return (a.value === b.value ? 0 :
           (a.value > b.value ? 1 : -1)
         );
@@ -77,10 +78,14 @@
     var totalRows = 0;
 
     // events
+    var onSetItemsCalled = new Slick.Event();
     var onRowCountChanged = new Slick.Event();
     var onRowsChanged = new Slick.Event();
     var onRowsOrCountChanged = new Slick.Event();
+    var onBeforePagingInfoChanged = new Slick.Event();
     var onPagingInfoChanged = new Slick.Event();
+    var onGroupExpanded = new Slick.Event();
+    var onGroupCollapsed = new Slick.Event();
 
     options = $.extend(true, {}, defaults, options);
 
@@ -128,6 +133,10 @@
       return items;
     }
 
+    function getIdPropertyName() {
+      return idProperty;
+    }
+
     function setItems(data, objectIdProperty) {
       if (objectIdProperty !== undefined) {
         idProperty = objectIdProperty;
@@ -137,9 +146,12 @@
       updateIdxById();
       ensureIdUniqueness();
       refresh();
+      onSetItemsCalled.notify({ idProperty: objectIdProperty }, null, self);
     }
 
     function setPagingOptions(args) {
+      onBeforePagingInfoChanged.notify(getPagingInfo(), null, self);
+
       if (args.pageSize != undefined) {
         pagesize = args.pageSize;
         pagenum = pagesize ? Math.min(pagenum, Math.max(0, Math.ceil(totalRows / pagesize) - 1)) : 0;
@@ -156,7 +168,7 @@
 
     function getPagingInfo() {
       var totalPages = pagesize ? Math.max(1, Math.ceil(totalRows / pagesize)) : 1;
-      return {pageSize: pagesize, pageNum: pagenum, totalRows: totalRows, totalPages: totalPages, dataView: self};
+      return { pageSize: pagesize, pageNum: pagenum, totalRows: totalRows, totalPages: totalPages, dataView: self };
     }
 
     function sort(comparer, ascending) {
@@ -186,7 +198,7 @@
       sortComparer = null;
       var oldToString = Object.prototype.toString;
       Object.prototype.toString = (typeof field == "function") ? field : function () {
-        return this[field]
+        return this[field];
       };
       // an extra reversal for descending sort keeps the sort stable
       // (assuming a stable native sort implementation, which isn't true in some cases)
@@ -211,12 +223,12 @@
       }
     }
 
-    function getFilteredItems(){
+    function getFilteredItems() {
       return filteredItems;
     }
 
 
-    function getFilter(){
+    function getFilter() {
       return filter;
     }
 
@@ -419,7 +431,7 @@
     }
 
     function sortedAddItem(item) {
-      if(!sortComparer) {
+      if (!sortComparer) {
         throw new Error("sortedAddItem() requires a sort comparer, use sort()");
       }
       insertItem(sortedIndex(item), item);
@@ -429,11 +441,11 @@
       if (idxById[id] === undefined || id !== item[idProperty]) {
         throw new Error("Invalid or non-matching id " + idxById[id]);
       }
-      if(!sortComparer) {
+      if (!sortComparer) {
         throw new Error("sortedUpdateItem() requires a sort comparer, use sort()");
       }
       var oldItem = getItemById(id);
-      if(sortComparer(oldItem, item) !== 0) {
+      if (sortComparer(oldItem, item) !== 0) {
         // item affects sorting -> must use sorted add
         deleteItem(id);
         sortedAddItem(item);
@@ -505,10 +517,22 @@
         for (var i = 0; i < groupingInfos.length; i++) {
           toggledGroupsByLevel[i] = {};
           groupingInfos[i].collapsed = collapse;
+
+          if (collapse === true) {
+            onGroupCollapsed.notify({ level: i, groupingKey: null });
+          } else {
+            onGroupExpanded.notify({ level: i, groupingKey: null });
+          }
         }
       } else {
         toggledGroupsByLevel[level] = {};
         groupingInfos[level].collapsed = collapse;
+
+        if (collapse === true) {
+          onGroupCollapsed.notify({ level: level, groupingKey: null });
+        } else {
+          onGroupExpanded.notify({ level: level, groupingKey: null });
+        }
       }
       refresh();
     }
@@ -541,11 +565,19 @@
     function collapseGroup(varArgs) {
       var args = Array.prototype.slice.call(arguments);
       var arg0 = args[0];
-      if (args.length == 1 && arg0.indexOf(groupingDelimiter) != -1) {
-        expandCollapseGroup(arg0.split(groupingDelimiter).length - 1, arg0, true);
+      var groupingKey;
+      var level;
+
+      if (args.length === 1 && arg0.indexOf(groupingDelimiter) !== -1) {
+        groupingKey = arg0;
+        level = arg0.split(groupingDelimiter).length - 1;
       } else {
-        expandCollapseGroup(args.length - 1, args.join(groupingDelimiter), true);
+        groupingKey = args.join(groupingDelimiter);
+        level = args.length - 1;
       }
+
+      expandCollapseGroup(level, groupingKey, true);
+      onGroupCollapsed.notify({ level: level, groupingKey: groupingKey });
     }
 
     /**
@@ -557,11 +589,19 @@
     function expandGroup(varArgs) {
       var args = Array.prototype.slice.call(arguments);
       var arg0 = args[0];
-      if (args.length == 1 && arg0.indexOf(groupingDelimiter) != -1) {
-        expandCollapseGroup(arg0.split(groupingDelimiter).length - 1, arg0, false);
+      var groupingKey;
+      var level;
+
+      if (args.length === 1 && arg0.indexOf(groupingDelimiter) !== -1) {
+        level = arg0.split(groupingDelimiter).length - 1;
+        groupingKey = arg0;
       } else {
-        expandCollapseGroup(args.length - 1, args.join(groupingDelimiter), false);
+        level = args.length - 1;
+        groupingKey = args.join(groupingDelimiter);
       }
+
+      expandCollapseGroup(level, groupingKey, false);
+      onGroupExpanded.notify({ level: level, groupingKey: groupingKey });
     }
 
     function getGroups() {
@@ -611,6 +651,10 @@
           group = groups[i];
           group.groups = extractGroups(group.rows, group);
         }
+      }
+
+      if(groups.length) {
+        addTotals(groups);
       }
 
       groups.sort(groupingInfos[level].comparer);
@@ -676,7 +720,7 @@
         }
 
         if (gi.aggregators.length && (
-            gi.aggregateEmpty || g.rows.length || (g.groups && g.groups.length))) {
+          gi.aggregateEmpty || g.rows.length || (g.groups && g.groups.length))) {
           addGroupTotals(g);
         }
 
@@ -708,7 +752,9 @@
     }
 
     function getFunctionInfo(fn) {
-      var fnRegex = /^function[^(]*\(([^)]*)\)\s*{([\s\S]*)}$/;
+      var fnStr = fn.toString();
+      var usingEs5 = fnStr.indexOf('function') >= 0; // with ES6, the word function is not present
+      var fnRegex = usingEs5 ? /^function[^(]*\(([^)]*)\)\s*{([\s\S]*)}$/ : /^[^(]*\(([^)]*)\)\s*{([\s\S]*)}$/;
       var matches = fn.toString().match(fnRegex);
       return {
         params: matches[1].split(","),
@@ -717,16 +763,23 @@
     }
 
     function compileAccumulatorLoop(aggregator) {
-      var accumulatorInfo = getFunctionInfo(aggregator.accumulate);
-      var fn = new Function(
+      if (aggregator.accumulate) {
+        var accumulatorInfo = getFunctionInfo(aggregator.accumulate);
+        var fn = new Function(
           "_items",
           "for (var " + accumulatorInfo.params[0] + ", _i=0, _il=_items.length; _i<_il; _i++) {" +
-              accumulatorInfo.params[0] + " = _items[_i]; " +
-              accumulatorInfo.body +
+          accumulatorInfo.params[0] + " = _items[_i]; " +
+          accumulatorInfo.body +
           "}"
-      );
-      fn.displayName = fn.name = "compiledAccumulatorLoop";
-      return fn;
+        );
+        var fnName = "compiledAccumulatorLoop";
+        fn.displayName = fnName;
+        fn.name = setFunctionName(fn, fnName);
+        return fn;
+      } else {
+        return function noAccumulator() {
+        }
+      }
     }
 
     function compileFilter() {
@@ -736,11 +789,11 @@
       var filterPath2 = "{ _retval[_idx++] = $item$; continue _coreloop; }$1";
       // make some allowances for minification - there's only so far we can go with RegEx
       var filterBody = filterInfo.body
-          .replace(/return false\s*([;}]|\}|$)/gi, filterPath1)
-          .replace(/return!1([;}]|\}|$)/gi, filterPath1)
-          .replace(/return true\s*([;}]|\}|$)/gi, filterPath2)
-          .replace(/return!0([;}]|\}|$)/gi, filterPath2)
-          .replace(/return ([^;}]+?)\s*([;}]|$)/gi,
+        .replace(/return false\s*([;}]|\}|$)/gi, filterPath1)
+        .replace(/return!1([;}]|\}|$)/gi, filterPath1)
+        .replace(/return true\s*([;}]|\}|$)/gi, filterPath2)
+        .replace(/return!0([;}]|\}|$)/gi, filterPath2)
+        .replace(/return ([^;}]+?)\s*([;}]|$)/gi,
           "{ if ($1) { _retval[_idx++] = $item$; }; continue _coreloop; }$2");
 
       // This preserves the function template code after JS compression,
@@ -762,7 +815,9 @@
       tpl = tpl.replace(/\$args\$/gi, filterInfo.params[1]);
 
       var fn = new Function("_items,_args", tpl);
-      fn.displayName = fn.name = "compiledFilter";
+      var fnName = "compiledFilter";
+      fn.displayName = fnName;
+      fn.name = setFunctionName(fn, fnName);
       return fn;
     }
 
@@ -773,11 +828,11 @@
       var filterPath2 = "{ _cache[_i] = true;_retval[_idx++] = $item$; continue _coreloop; }$1";
       // make some allowances for minification - there's only so far we can go with RegEx
       var filterBody = filterInfo.body
-          .replace(/return false\s*([;}]|\}|$)/gi, filterPath1)
-          .replace(/return!1([;}]|\}|$)/gi, filterPath1)
-          .replace(/return true\s*([;}]|\}|$)/gi, filterPath2)
-          .replace(/return!0([;}]|\}|$)/gi, filterPath2)
-          .replace(/return ([^;}]+?)\s*([;}]|$)/gi,
+        .replace(/return false\s*([;}]|\}|$)/gi, filterPath1)
+        .replace(/return!1([;}]|\}|$)/gi, filterPath1)
+        .replace(/return true\s*([;}]|\}|$)/gi, filterPath2)
+        .replace(/return!0([;}]|\}|$)/gi, filterPath2)
+        .replace(/return ([^;}]+?)\s*([;}]|$)/gi,
           "{ if ((_cache[_i] = $1)) { _retval[_idx++] = $item$; }; continue _coreloop; }$2");
 
       // This preserves the function template code after JS compression,
@@ -803,8 +858,28 @@
       tpl = tpl.replace(/\$args\$/gi, filterInfo.params[1]);
 
       var fn = new Function("_items,_args,_cache", tpl);
-      fn.displayName = fn.name = "compiledFilterWithCaching";
+      var fnName = "compiledFilterWithCaching";
+      fn.displayName = fnName;
+      fn.name = setFunctionName(fn, fnName);
       return fn;
+    }
+
+    /**
+     * In ES5 we could set the function name on the fly but in ES6 this is forbidden and we need to set it through differently
+     * We can use Object.defineProperty and set it the property to writable, see MDN for reference
+     * https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperty
+     * @param {string} fn
+     * @param {string} fnName
+     */
+    function setFunctionName(fn, fnName) {
+      try {
+        Object.defineProperty(fn, 'name', {
+          writable: true,
+          value: fnName
+        });
+      } catch (err) {
+        fn.name = fnName;
+      }
     }
 
     function uncompiledFilter(items, args) {
@@ -868,21 +943,21 @@
       } else {
         paged = filteredItems;
       }
-      return {totalRows: filteredItems.length, rows: paged};
+      return { totalRows: filteredItems.length, rows: paged };
     }
 
     function getRowDiffs(rows, newRows) {
       var item, r, eitherIsNonData, diff = [];
-      var from = 0, to = newRows.length;
+      var from = 0, to = Math.max(newRows.length, rows.length);
 
       if (refreshHints && refreshHints.ignoreDiffsBefore) {
         from = Math.max(0,
-            Math.min(newRows.length, refreshHints.ignoreDiffsBefore));
+          Math.min(newRows.length, refreshHints.ignoreDiffsBefore));
       }
 
       if (refreshHints && refreshHints.ignoreDiffsAfter) {
         to = Math.min(newRows.length,
-            Math.max(0, refreshHints.ignoreDiffsAfter));
+          Math.max(0, refreshHints.ignoreDiffsAfter));
       }
 
       for (var i = from, rl = rows.length; i < to; i++) {
@@ -892,17 +967,17 @@
           item = newRows[i];
           r = rows[i];
 
-          if ((groupingInfos.length && (eitherIsNonData = (item.__nonDataRow) || (r.__nonDataRow)) &&
-              item.__group !== r.__group ||
-              item.__group && !item.equals(r))
-              || (eitherIsNonData &&
+          if (!item || (groupingInfos.length && (eitherIsNonData = (item.__nonDataRow) || (r.__nonDataRow)) &&
+            item.__group !== r.__group ||
+            item.__group && !item.equals(r))
+            || (eitherIsNonData &&
               // no good way to compare totals since they are arbitrary DTOs
               // deep object comparison is pretty expensive
               // always considering them 'dirty' seems easier for the time being
               (item.__groupTotals || r.__groupTotals))
-              || item[idProperty] != r[idProperty]
-              || (updated && updated[item[idProperty]])
-              ) {
+            || item[idProperty] != r[idProperty]
+            || (updated && updated[item[idProperty]])
+          ) {
             diff[diff.length] = i;
           }
         }
@@ -914,7 +989,7 @@
       rowsById = null;
 
       if (refreshHints.isFilterNarrowing != prevRefreshHints.isFilterNarrowing ||
-          refreshHints.isFilterExpanding != prevRefreshHints.isFilterExpanding) {
+        refreshHints.isFilterExpanding != prevRefreshHints.isFilterExpanding) {
         filterCache = [];
       }
 
@@ -926,7 +1001,6 @@
       if (groupingInfos.length) {
         groups = extractGroups(newRows);
         if (groups.length) {
-          addTotals(groups);
           newRows = flattenGroupedRows(groups);
         }
       }
@@ -942,6 +1016,8 @@
       if (suspend) {
         return;
       }
+
+      var previousPagingInfo = $.extend(true, {}, getPagingInfo());
 
       var countBefore = rows.length;
       var totalRowsBefore = totalRows;
@@ -960,17 +1036,20 @@
       refreshHints = {};
 
       if (totalRowsBefore !== totalRows) {
+        onBeforePagingInfoChanged.notify(previousPagingInfo, null, self); // use the previously saved paging info
         onPagingInfoChanged.notify(getPagingInfo(), null, self);
       }
       if (countBefore !== rows.length) {
-        onRowCountChanged.notify({previous: countBefore, current: rows.length, dataView: self, callingOnRowsChanged: (diff.length > 0)}, null, self);
+        onRowCountChanged.notify({ previous: countBefore, current: rows.length, dataView: self, callingOnRowsChanged: (diff.length > 0) }, null, self);
       }
       if (diff.length > 0) {
-        onRowsChanged.notify({rows: diff, dataView: self, calledOnRowCountChanged: (countBefore !== rows.length)}, null, self);
+        onRowsChanged.notify({ rows: diff, dataView: self, calledOnRowCountChanged: (countBefore !== rows.length) }, null, self);
       }
       if (countBefore !== rows.length || diff.length > 0) {
-        onRowsOrCountChanged.notify({rowsDiff: diff, previousRowCount: countBefore, currentRowCount: rows.length,
-          rowCountChanged: countBefore !== rows.length, rowsChanged: diff.length > 0, dataView: self}, null, self);
+        onRowsOrCountChanged.notify({
+          rowsDiff: diff, previousRowCount: countBefore, currentRowCount: rows.length,
+          rowCountChanged: countBefore !== rows.length, rowsChanged: diff.length > 0, dataView: self
+        }, null, self);
       }
     }
 
@@ -1025,14 +1104,14 @@
         }
       }
 
-      grid.onSelectedRowsChanged.subscribe(function(e, args) {
+      grid.onSelectedRowsChanged.subscribe(function (e, args) {
         if (inHandler) { return; }
         var newSelectedRowIds = self.mapRowsToIds(grid.getSelectedRows());
         if (!preserveHiddenOnSelectionChange || !grid.getOptions().multiSelect) {
           setSelectedRowIds(newSelectedRowIds);
         } else {
           // keep the ones that are hidden
-          var existing = $.grep(selectedRowIds, function(id) { return self.getRowById(id) === undefined; });
+          var existing = $.grep(selectedRowIds, function (id) { return self.getRowById(id) === undefined; });
           // add the newly selected ones
           setSelectedRowIds(existing.concat(newSelectedRowIds));
         }
@@ -1075,13 +1154,13 @@
         }
       }
 
-      grid.onCellCssStylesChanged.subscribe(function(e, args) {
+      grid.onCellCssStylesChanged.subscribe(function (e, args) {
         if (inHandler) { return; }
         if (key != args.key) { return; }
         if (args.hash) {
           storeCellCssStyles(args.hash);
         } else {
-          grid.onCellCssStylesChanged.unsubscribe(styleChanged);
+          grid.onCellCssStylesChanged.unsubscribe();
           self.onRowsOrCountChanged.unsubscribe(update);
         }
       });
@@ -1095,6 +1174,7 @@
       "endUpdate": endUpdate,
       "setPagingOptions": setPagingOptions,
       "getPagingInfo": getPagingInfo,
+      "getIdPropertyName": getIdPropertyName,
       "getItems": getItems,
       "setItems": setItems,
       "setFilter": setFilter,
@@ -1138,10 +1218,14 @@
       "getItemMetadata": getItemMetadata,
 
       // events
+      "onSetItemsCalled": onSetItemsCalled,
       "onRowCountChanged": onRowCountChanged,
       "onRowsChanged": onRowsChanged,
       "onRowsOrCountChanged": onRowsOrCountChanged,
-      "onPagingInfoChanged": onPagingInfoChanged
+      "onBeforePagingInfoChanged": onBeforePagingInfoChanged,
+      "onPagingInfoChanged": onPagingInfoChanged,
+      "onGroupExpanded": onGroupExpanded,
+      "onGroupCollapsed": onGroupCollapsed
     });
   }
 
@@ -1167,7 +1251,7 @@
       if (!groupTotals.avg) {
         groupTotals.avg = {};
       }
-      if (this.nonNullCount_ != 0) {
+      if (this.nonNullCount_ !== 0) {
         groupTotals.avg[this.field_] = this.sum_ / this.nonNullCount_;
       }
     };
@@ -1194,7 +1278,7 @@
         groupTotals.min = {};
       }
       groupTotals.min[this.field_] = this.min_;
-    }
+    };
   }
 
   function MaxAggregator(field) {
@@ -1218,7 +1302,7 @@
         groupTotals.max = {};
       }
       groupTotals.max[this.field_] = this.max_;
-    }
+    };
   }
 
   function SumAggregator(field) {
@@ -1240,7 +1324,21 @@
         groupTotals.sum = {};
       }
       groupTotals.sum[this.field_] = this.sum_;
-    }
+    };
+  }
+
+  function CountAggregator(field) {
+    this.field_ = field;
+
+    this.init = function () {
+    };
+
+    this.storeResult = function (groupTotals) {
+      if (!groupTotals.count) {
+        groupTotals.count = {};
+      }
+      groupTotals.count[this.field_] = groupTotals.group.rows.length;
+    };
   }
 
   // TODO:  add more built-in aggregators

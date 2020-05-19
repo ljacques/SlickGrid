@@ -27,7 +27,7 @@
     var _options = $.extend(true, {}, _defaults, options);
 
     // user could override the checkbox icon logic from within the options or after instantiating the plugin
-    if(typeof _options.selectableOverride === 'function') {
+    if (typeof _options.selectableOverride === 'function') {
       selectableOverride(_options.selectableOverride);
     }
 
@@ -42,7 +42,7 @@
         addCheckboxToFilterHeaderRow(grid);
       }
       if (!_options.hideInColumnTitleRow) {
-        _handler.subscribe(_grid.onHeaderClick, handleHeaderClick)
+        _handler.subscribe(_grid.onHeaderClick, handleHeaderClick);
       }
     }
 
@@ -178,7 +178,7 @@
 
       if (_selectedRowsLookup[row]) {
         _grid.setSelectedRows($.grep(_grid.getSelectedRows(), function (n) {
-          return n != row
+          return n != row;
         }));
       } else {
         _grid.setSelectedRows(_grid.getSelectedRows().concat(row));
@@ -204,7 +204,7 @@
         }
       }
       _grid.setSelectedRows($.grep(_grid.getSelectedRows(), function (n) {
-        return removeRows.indexOf(n) < 0
+        return removeRows.indexOf(n) < 0;
       }));
     }
 
@@ -221,8 +221,8 @@
           var rows = [];
           for (var i = 0; i < _grid.getDataLength(); i++) {
             // Get the row and check it's a selectable row before pushing it onto the stack
-            var rowItem = _grid.getDataItem(i);
-            if (rowItem.selectableRow !== false) {
+            var rowItem = _grid.getDataItem(i);            
+            if (checkSelectableOverride(i, rowItem, _grid)) {
               rows.push(i);
             }
           }
@@ -254,7 +254,7 @@
       return {
         id: _options.columnId,
         name: (_options.hideSelectAllCheckbox || _options.hideInColumnTitleRow) ? "" : "<input id='header-selector" + _selectAll_UID + "' type='checkbox'><label for='header-selector" + _selectAll_UID + "'></label>",
-        toolTip: _options.toolTip,
+        toolTip: (_options.hideSelectAllCheckbox || _options.hideInColumnTitleRow) ? "" : _options.toolTip,
         field: "sel",
         width: _options.width,
         resizable: false,
@@ -272,7 +272,7 @@
           $("<span id='filter-checkbox-selectall-container'><input id='header-filter-selector" + _selectAll_UID + "' type='checkbox'><label for='header-filter-selector" + _selectAll_UID + "'></label></span>")
             .appendTo(args.node)
             .on('click', function (evnt) {
-              handleHeaderClick(evnt, args)
+              handleHeaderClick(evnt, args);
             });
         }
       });

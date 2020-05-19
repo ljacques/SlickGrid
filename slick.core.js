@@ -83,12 +83,6 @@
       }      
     }
   });
-
-
-  if (Object.freeze) { 
-    Object.freeze(Slick.ColAutosizeMode); 
-    Object.freeze(Slick.AutoWidthStrategy); 
-  }
     
   /***
    * An event object for passing data to event handlers and letting them control propagation.
@@ -132,7 +126,7 @@
      */
     this.isImmediatePropagationStopped = function () {
       return isImmediatePropagationStopped;
-    }
+    };
   }
 
   /***
@@ -228,7 +222,7 @@
       handlers = [];
 
       return this;  // allow chaining
-    }
+    };
   }
 
   /***
@@ -312,7 +306,7 @@
       else {
         return "(" + this.fromRow + ":" + this.fromCell + " - " + this.toRow + ":" + this.toCell + ")";
       }
-    }
+    };
   }
 
 
@@ -702,7 +696,7 @@
       return ids.map(function (id) {
         return columnsById[id];
       });
-    }
+    };
   }
 })(jQuery);
 
